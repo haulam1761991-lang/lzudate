@@ -63,7 +63,7 @@ export default function Auth() {
   return (
     <div 
       className="min-h-screen flex items-center justify-center p-6 relative bg-cover bg-center bg-no-repeat"
-      style={{ backgroundImage: 'url("/login-bg.jpg")', fontFamily: '"SimSun", "STSong", serif' }}
+      style={{ backgroundImage: 'url("/logback.jpg")', fontFamily: '"SimSun", "STSong", serif' }}
     >
       <Link 
         to="/" 
