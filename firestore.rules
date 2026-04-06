@@ -1,0 +1,87 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    function hasRequiredUserFields() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['uid', 'email', 'campusCardNumber', 'createdAt']) &&
+             data.uid is string &&
+             data.email is string && data.email.matches("^[a-zA-Z0-9._%+-]+@lzu\\.edu\\.cn$") &&
+             data.campusCardNumber is string && data.campusCardNumber.size() > 0 && data.campusCardNumber.size() < 20;
+    }
+    function isUserUpdateValid() {
+      let data = request.resource.data;
+      let oldData = resource.data;
+      let affectedKeys = data.diff(oldData).affectedKeys();
+      return !affectedKeys.hasAny(['uid', 'email', 'campusCardNumber', 'createdAt']) &&
+             (!('name' in data) || (data.name is string && data.name.size() > 0 && data.name.size() < 50)) &&
+             (!('bio' in data) || (data.bio is string && data.bio.size() <= 500)) &&
+             (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 1000)) &&
+             (!('displayProfile' in data) || (data.displayProfile is string && data.displayProfile.size() <= 2000)) &&
+             (!('aiSummary' in data) || (data.aiSummary is string && data.aiSummary.size() <= 2000)) &&
+             (!('isParticipating' in data) || data.isParticipating is bool);
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && hasRequiredUserFields() && request.resource.data.uid == userId;
+      allow update: if isOwner(userId) && isUserUpdateValid();
+    }
+
+    match /likes/{likeId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.fromUserId || request.auth.uid == resource.data.toUserId);
+      allow create, update: if isAuthenticated() && 
+                    request.resource.data.fromUserId == request.auth.uid &&
+                    request.resource.data.toUserId is string &&
+                    request.resource.data.keys().hasAll(['fromUserId', 'toUserId', 'createdAt']);
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.fromUserId;
+    }
+
+    match /passes/{passId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.fromUserId);
+      allow create, update: if isAuthenticated() && 
+                    request.resource.data.fromUserId == request.auth.uid &&
+                    request.resource.data.toUserId is string &&
+                    request.resource.data.keys().hasAll(['fromUserId', 'toUserId', 'createdAt']);
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.fromUserId;
+    }
+
+    match /matches/{matchId} {
+      allow read: if isAuthenticated() && (request.auth.uid in resource.data.users);
+      allow create, update: if isAuthenticated() && 
+                    request.resource.data.users is list &&
+                    request.resource.data.users.size() == 2;
+      allow delete: if isAuthenticated() && request.auth.uid in resource.data.users;
+    }
+
+    match /drops/{dropId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && 
+                    request.resource.data.fromUserId == request.auth.uid &&
+                    request.resource.data.keys().hasAll(['fromUserId', 'fromEmail', 'toEmail']);
+      allow update: if isAuthenticated() && resource.data.fromUserId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.fromUserId == request.auth.uid;
+    }
+    
+    match /archived_matches/{archiveId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+    }
+    
+    match /cupid_matches/{cupidId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.cupidUserId == request.auth.uid;
+    }
+    
+    match /shared_chats/{chatId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.fromUserId || request.auth.uid == resource.data.toUserId);
+      allow create: if isAuthenticated() && request.resource.data.fromUserId == request.auth.uid;
+    }
+  }
+}

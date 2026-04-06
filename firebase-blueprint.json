@@ -1,0 +1,98 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Profile information for a registered LZU student",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "campusCardNumber": { "type": "string" },
+        "name": { "type": "string" },
+        "gender": { "type": "string", "enum": ["male", "female", "other"] },
+        "bio": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "displayProfile": { "type": "string" },
+        "aiSummary": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "campusCardNumber", "name", "gender", "createdAt"]
+    },
+    "Like": {
+      "title": "Like",
+      "description": "A record of one user liking another",
+      "type": "object",
+      "properties": {
+        "fromUserId": { "type": "string" },
+        "toUserId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fromUserId", "toUserId", "createdAt"]
+    },
+    "Match": {
+      "title": "Match",
+      "description": "A mutual like between two users",
+      "type": "object",
+      "properties": {
+        "users": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["users", "createdAt"]
+    },
+    "Drop": {
+      "title": "Drop",
+      "description": "Anonymous crush drop",
+      "type": "object",
+      "properties": {
+        "fromUserId": { "type": "string" },
+        "fromEmail": { "type": "string" },
+        "toEmail": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fromUserId", "fromEmail", "toEmail", "createdAt"]
+    },
+    "SharedChat": {
+      "title": "Shared Chat",
+      "description": "A chat history shared from one user to another",
+      "type": "object",
+      "properties": {
+        "fromUserId": { "type": "string" },
+        "toUserId": { "type": "string" },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "role": { "type": "string" },
+              "text": { "type": "string" }
+            }
+          }
+        },
+        "sharedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["fromUserId", "toUserId", "messages", "sharedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Stores user profiles"
+    },
+    "/likes/{likeId}": {
+      "schema": { "$ref": "#/entities/Like" },
+      "description": "Stores likes between users"
+    },
+    "/matches/{matchId}": {
+      "schema": { "$ref": "#/entities/Match" },
+      "description": "Stores mutual matches"
+    },
+    "/drops/{dropId}": {
+      "schema": { "$ref": "#/entities/Drop" },
+      "description": "Stores anonymous crush drops"
+    },
+    "/shared_chats/{chatId}": {
+      "schema": { "$ref": "#/entities/SharedChat" },
+      "description": "Stores shared AI chat histories"
+    }
+  }
+}
