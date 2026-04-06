@@ -49,7 +49,7 @@ export default function Layout() {
   return (
     <div 
       className="min-h-screen flex flex-col font-sans text-black bg-cover bg-center bg-no-repeat bg-fixed"
-      style={{ backgroundImage: 'url("/match-bg.webp")', backgroundColor: 'transparent' }}
+      style={{ backgroundImage: 'url("/match.webp")', backgroundColor: 'transparent' }}
     >
       {/* Desktop Header */}
       <header className="hidden sm:block z-50 py-6 bg-transparent">
