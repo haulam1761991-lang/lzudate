@@ -103,7 +103,7 @@ export default function Landing() {
         {/* Background Image */}
         <div className="absolute inset-0 z-0">
           <img
-            src="/1-sm.webp"
+            src="/1.png"
             alt="Dreamy landscape"
             className="w-full h-full object-cover"
           />
