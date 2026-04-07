@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
-import { auth, db } from '../firebase';
-import { signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../cloudbase';
 import { Users, User, Inbox } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion } from 'motion/react';
@@ -14,14 +12,14 @@ export default function Layout() {
 
   useEffect(() => {
     const checkProfile = async () => {
-      if (!auth.currentUser) {
+      const loginState = await auth.getLoginState();
+      if (!loginState) {
         navigate('/');
         return;
       }
       try {
-        const docRef = doc(db, 'users', auth.currentUser.uid);
-        const docSnap = await getDoc(docRef);
-        if (!docSnap.exists() || !docSnap.data().onboardingCompleted) {
+        const res = await db.collection('users').doc(auth.currentUser?.uid).get();
+        if (!res.data || res.data.length === 0 || !res.data[0].onboardingCompleted) {
           navigate('/onboarding');
         }
       } catch (err) {
@@ -34,7 +32,7 @@ export default function Layout() {
   }, [navigate]);
 
   const handleLogout = async () => {
-    await signOut(auth);
+    await auth.signOut();
     navigate('/');
   };
 
@@ -49,7 +47,7 @@ export default function Layout() {
   return (
     <div 
       className="min-h-screen flex flex-col font-sans text-black bg-cover bg-center bg-no-repeat bg-fixed"
-      style={{ backgroundImage: 'url("/match.png")', backgroundColor: 'transparent' }}
+      style={{ backgroundImage: 'url("/match-bg.webp")', backgroundColor: 'transparent' }}
     >
       {/* Desktop Header */}
       <header className="hidden sm:block z-50 py-6 bg-transparent">

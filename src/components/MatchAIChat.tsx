@@ -71,12 +71,14 @@ export default function MatchAIChat({ matchUid, matchName, displayProfile, aiSum
     }
     setSharing(true);
     try {
-      const { auth, db } = await import('../firebase');
-      const { addDoc, collection } = await import('firebase/firestore');
-      if (!auth.currentUser) return;
+      const { auth, db } = await import('../cloudbase');
+      const loginState = await auth.getLoginState();
+      if (!loginState) return;
+      const uid = auth.currentUser?.uid;
+      if (!uid) return;
       
-      await addDoc(collection(db, 'shared_chats'), {
-        fromUserId: auth.currentUser.uid,
+      await db.collection('shared_chats').add({
+        fromUserId: uid,
         toUserId: matchUid,
         messages: messages,
         sharedAt: new Date().toISOString()

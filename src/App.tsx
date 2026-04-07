@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from './firebase';
+import { auth } from './cloudbase';
 
 import Landing from './components/Landing';
 import Auth from './components/Auth';
@@ -16,11 +15,33 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+    const checkLoginState = async () => {
+      const loginState = await auth.getLoginState();
+      if (loginState) {
+        setUser(auth.currentUser);
+      } else {
+        setUser(null);
+      }
       setLoading(false);
+    };
+
+    checkLoginState();
+
+    const unsubscribe = auth.onLoginStateChanged((loginState) => {
+      if (loginState) {
+        setUser(auth.currentUser);
+      } else {
+        setUser(null);
+      }
     });
-    return () => unsubscribe();
+
+    return () => {
+      // CloudBase onLoginStateChanged might not return an unsubscribe function,
+      // but if it does, we call it. Otherwise we just ignore.
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
   }, []);
 
   if (loading) {

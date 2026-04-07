@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../firebase';
-import { collection, query, getDocs, doc, setDoc, getDoc } from 'firebase/firestore';
+import { db, auth } from '../cloudbase';
 import { Heart, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { calculateMatchScore } from '../utils/matching';
@@ -23,27 +22,31 @@ export default function Discover() {
 
   useEffect(() => {
     const fetchUsers = async () => {
-      if (!auth.currentUser) return;
-      const currentUid = auth.currentUser.uid;
+      const loginState = await auth.getLoginState();
+      if (!loginState) return;
+      const currentUid = auth.currentUser?.uid;
+      if (!currentUid) return;
 
       try {
         // Fetch current user's profile to get their questionnaire
-        const currentUserDoc = await getDoc(doc(db, 'users', currentUid));
-        const currentUserData = currentUserDoc.data();
+        const currentUserDoc = await db.collection('users').doc(currentUid).get();
+        const currentUserData = currentUserDoc.data && currentUserDoc.data.length > 0 ? currentUserDoc.data[0] : null;
         const myQuestionnaire = currentUserData?.questionnaire;
 
-        const q = query(collection(db, 'users'));
-        const querySnapshot = await getDocs(q);
+        const querySnapshot = await db.collection('users').limit(100).get();
         const fetchedUsers: UserProfile[] = [];
         
-        for (const docSnap of querySnapshot.docs) {
-          if (docSnap.id !== currentUid) {
-            const likeRef = doc(db, 'likes', `${currentUid}_${docSnap.id}`);
-            const passRef = doc(db, 'passes', `${currentUid}_${docSnap.id}`);
-            const [likeSnap, passSnap] = await Promise.all([getDoc(likeRef), getDoc(passRef)]);
+        for (const docSnap of querySnapshot.data || []) {
+          if (docSnap._id !== currentUid && docSnap.uid !== currentUid) {
+            const targetUid = docSnap.uid || docSnap._id;
+            const likeRes = await db.collection('likes').doc(`${currentUid}_${targetUid}`).get();
+            const passRes = await db.collection('passes').doc(`${currentUid}_${targetUid}`).get();
             
-            if (!likeSnap.exists() && !passSnap.exists()) {
-              const targetData = docSnap.data() as UserProfile;
+            const hasLiked = likeRes.data && likeRes.data.length > 0;
+            const hasPassed = passRes.data && passRes.data.length > 0;
+
+            if (!hasLiked && !hasPassed) {
+              const targetData = docSnap as UserProfile;
               
               // Calculate match score if both have questionnaires
               let score = 0;
@@ -55,6 +58,7 @@ export default function Discover() {
               if (score > 0 || (!myQuestionnaire || !targetData.questionnaire)) {
                 fetchedUsers.push({
                   ...targetData,
+                  uid: targetUid,
                   matchScore: score
                 });
               }
@@ -75,27 +79,28 @@ export default function Discover() {
   }, []);
 
   const handleAction = async (action: 'like' | 'pass') => {
-    if (!auth.currentUser || currentIndex >= users.length) return;
+    const loginState = await auth.getLoginState();
+    if (!loginState || currentIndex >= users.length) return;
     
-    const currentUid = auth.currentUser.uid;
+    const currentUid = auth.currentUser?.uid;
+    if (!currentUid) return;
     const targetUser = users[currentIndex];
     const targetUid = targetUser.uid;
 
     try {
       if (action === 'like') {
-        await setDoc(doc(db, 'likes', `${currentUid}_${targetUid}`), {
+        await db.collection('likes').doc(`${currentUid}_${targetUid}`).set({
           fromUserId: currentUid,
           toUserId: targetUid,
           createdAt: new Date().toISOString()
         });
 
         // Check mutual like
-        const reverseLikeRef = doc(db, 'likes', `${targetUid}_${currentUid}`);
-        const reverseLikeSnap = await getDoc(reverseLikeRef);
+        const reverseLikeRes = await db.collection('likes').doc(`${targetUid}_${currentUid}`).get();
         
-        if (reverseLikeSnap.exists()) {
+        if (reverseLikeRes.data && reverseLikeRes.data.length > 0) {
           const matchId = [currentUid, targetUid].sort().join('_');
-          await setDoc(doc(db, 'matches', matchId), {
+          await db.collection('matches').doc(matchId).set({
             users: [currentUid, targetUid],
             createdAt: new Date().toISOString()
           });
@@ -104,7 +109,7 @@ export default function Discover() {
           setTimeout(() => setMatchNotification(null), 3000);
         }
       } else {
-        await setDoc(doc(db, 'passes', `${currentUid}_${targetUid}`), {
+        await db.collection('passes').doc(`${currentUid}_${targetUid}`).set({
           fromUserId: currentUid,
           toUserId: targetUid,
           createdAt: new Date().toISOString()

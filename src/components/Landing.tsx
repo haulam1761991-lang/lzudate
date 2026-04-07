@@ -33,7 +33,7 @@ const FAQ_DATA = {
     title: "隐私与安全",
     items: [
       { q: "我的问卷答案会被别人看到吗？", a: "不会。你的问卷答案仅用于匹配算法计算，不会展示给任何其他用户。匹配对象只能看到兼容性分析报告，而不是你的原始答案。" },
-      { q: "对方能看到我的微信号吗？", a: "我们只会给对方你的邮件，邮件是异步沟通的，他发送邮件后，你可以根据TA的邮件内容自行选择是否继续，无需有任何压力" },
+      { q: "对方能看到我的微信号吗？", a: "只有在双向匹配成功（双方都表达了兴趣）之后，微信号才会互相解锁。单方面不会泄露任何联系方式。" },
       { q: "可以删除我的数据吗？", a: "当然。你可以在个人设置中随时暂停匹配或导出并删除全部数据。你的数据，你做主。" },
       { q: "可以修改问卷答案吗？", a: "可以。在个人设置中随时重新填写问卷，更新后的答案在下一次匹配中生效。" },
       { q: "可以暂停匹配吗？", a: "可以。在个人资料页打开「暂停匹配」开关即可。暂停期间你的资料不会进入匹配池，数据会被保留，随时可以重新开启。" }
@@ -103,7 +103,7 @@ export default function Landing() {
         {/* Background Image */}
         <div className="absolute inset-0 z-0">
           <img
-            src="/1.png"
+            src="/1-sm.webp"
             alt="Dreamy landscape"
             className="w-full h-full object-cover"
           />
@@ -173,7 +173,7 @@ export default function Landing() {
             viewport={{ once: true }}
             className="relative h-[28rem] rounded-[2rem] overflow-hidden group"
           >
-            <img src="/2.png" alt="Bench" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+            <img src="/2-sm.webp" alt="Bench" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
             
             <div className="relative z-10 p-10 sm:p-16 h-full flex flex-col justify-center max-w-xl">
               <h3 className="text-4xl sm:text-5xl text-white mb-4 font-bold drop-shadow-lg">告诉我们关于你的事</h3>
@@ -188,7 +188,7 @@ export default function Landing() {
             viewport={{ once: true }}
             className="relative h-[28rem] rounded-[2rem] overflow-hidden group"
           >
-            <img src="/3.jpg" alt="Beach" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+            <img src="/3-sm.webp" alt="Beach" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
             
             <div className="relative z-10 p-10 sm:p-16 h-full flex flex-col justify-center max-w-xl">
               <h3 className="text-4xl sm:text-5xl text-white mb-4 font-bold drop-shadow-lg">每周参与匹配</h3>
@@ -203,7 +203,7 @@ export default function Landing() {
             viewport={{ once: true }}
             className="relative h-[28rem] rounded-[2rem] overflow-hidden group"
           >
-            <img src="/4.png" alt="Couple" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+            <img src="/4-sm.webp" alt="Couple" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
             
             <div className="relative z-10 p-10 sm:p-16 h-full flex flex-col justify-center max-w-xl">
               <h3 className="text-4xl sm:text-5xl text-white mb-4 font-bold drop-shadow-lg ml-0">去约会吧！</h3>
@@ -222,7 +222,7 @@ export default function Landing() {
           {/* Left: Library Image */}
           <div className="relative h-[400px] sm:h-[500px] rounded-[2rem] overflow-hidden shadow-xl group">
             <img 
-              src="/library.jpg" 
+              src="/library-sm.webp" 
               alt="Library" 
               className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
               referrerPolicy="no-referrer" 

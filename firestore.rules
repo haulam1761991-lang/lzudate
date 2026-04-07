@@ -10,16 +10,15 @@ service cloud.firestore {
     }
     function hasRequiredUserFields() {
       let data = request.resource.data;
-      return data.keys().hasAll(['uid', 'email', 'campusCardNumber', 'createdAt']) &&
+      return data.keys().hasAll(['uid', 'createdAt']) &&
              data.uid is string &&
-             data.email is string && data.email.matches("^[a-zA-Z0-9._%+-]+@lzu\\.edu\\.cn$") &&
-             data.campusCardNumber is string && data.campusCardNumber.size() > 0 && data.campusCardNumber.size() < 20;
+             (!('email' in data) || (data.email is string && data.email.matches("^[a-zA-Z0-9._%+-]+@lzu\\.edu\\.cn$")));
     }
     function isUserUpdateValid() {
       let data = request.resource.data;
       let oldData = resource.data;
       let affectedKeys = data.diff(oldData).affectedKeys();
-      return !affectedKeys.hasAny(['uid', 'email', 'campusCardNumber', 'createdAt']) &&
+      return !affectedKeys.hasAny(['uid', 'createdAt']) &&
              (!('name' in data) || (data.name is string && data.name.size() > 0 && data.name.size() < 50)) &&
              (!('bio' in data) || (data.bio is string && data.bio.size() <= 500)) &&
              (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 1000)) &&

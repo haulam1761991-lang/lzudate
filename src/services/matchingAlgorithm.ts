@@ -1,5 +1,4 @@
-import { db } from '../firebase';
-import { collection, getDocs, doc, setDoc } from 'firebase/firestore';
+import { db } from '../cloudbase';
 import { calculateMatchScore } from '../utils/matching';
 
 // Cosine Similarity calculation
@@ -53,17 +52,18 @@ async function callGLM(prompt: string): Promise<string> {
 export async function runWeeklyMatching() {
   try {
     // 1. Fetch all participating users
-    const usersSnapshot = await getDocs(collection(db, 'users'));
+    const usersRes = await db.collection('users').get();
     const users: any[] = [];
     const emailToUid: Record<string, string> = {};
     
-    usersSnapshot.forEach(doc => {
-      const data = doc.data();
+    (usersRes.data || []).forEach((doc: any) => {
+      const data = doc;
+      const uid = doc.uid || doc._id;
       if (data.email) {
-        emailToUid[data.email] = doc.id;
+        emailToUid[data.email] = uid;
       }
       if (data.isParticipating && data.embedding) {
-        users.push({ uid: doc.id, ...data });
+        users.push({ uid: uid, ...data });
       }
     });
 
@@ -73,10 +73,10 @@ export async function runWeeklyMatching() {
     }
 
     // 2. Fetch drops (crushes) for Graph Score
-    const dropsSnapshot = await getDocs(collection(db, 'drops'));
+    const dropsRes = await db.collection('drops').get();
     const graphEdges: Record<string, string[]> = {}; // uid -> array of uids they dropped
-    dropsSnapshot.forEach(doc => {
-      const data = doc.data();
+    (dropsRes.data || []).forEach((doc: any) => {
+      const data = doc;
       const fromUid = data.fromUserId;
       const toUid = emailToUid[data.toEmail];
       if (fromUid && toUid) {
@@ -86,10 +86,10 @@ export async function runWeeklyMatching() {
     });
 
     // 3. Fetch archived matches for Feedback Modifier
-    const archivedSnapshot = await getDocs(collection(db, 'archived_matches'));
+    const archivedRes = await db.collection('archived_matches').get();
     const satisfiedMatches: Record<string, string[]> = {}; // uid -> array of uids they were satisfied with
-    archivedSnapshot.forEach(doc => {
-      const data = doc.data();
+    (archivedRes.data || []).forEach((doc: any) => {
+      const data = doc;
       if (data.status === 'satisfied') {
         const uid = data.userId;
         const matchUid = data.matchUid;
@@ -210,13 +210,26 @@ AI总结画像: ${u2Data.aiSummary || '未知'}
 
       // Create a unique match ID
       const matchId = [match.u1, match.u2].sort().join('_');
-      await setDoc(doc(db, 'matches', matchId), {
-        users: [match.u1, match.u2],
-        matchedAt: new Date().toISOString(),
-        similarityScore: match.score,
-        aiReasoning: aiReasoning,
-        status: 'active'
-      }, { merge: true });
+      
+      // Check if match exists
+      const matchRes = await db.collection('matches').doc(matchId).get();
+      if (matchRes.data && matchRes.data.length > 0) {
+        await db.collection('matches').doc(matchId).update({
+          users: [match.u1, match.u2],
+          matchedAt: new Date().toISOString(),
+          similarityScore: match.score,
+          aiReasoning: aiReasoning,
+          status: 'active'
+        });
+      } else {
+        await db.collection('matches').doc(matchId).set({
+          users: [match.u1, match.u2],
+          matchedAt: new Date().toISOString(),
+          similarityScore: match.score,
+          aiReasoning: aiReasoning,
+          status: 'active'
+        });
+      }
     });
 
     await Promise.all(matchPromises);

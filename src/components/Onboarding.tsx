@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { auth, db, storage } from '../firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { auth, db, appInstance } from '../cloudbase';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Star } from 'lucide-react';
@@ -189,15 +187,15 @@ export default function Onboarding() {
 
   useEffect(() => {
     const checkProfile = async () => {
-      if (!auth.currentUser) {
+      const loginState = await auth.getLoginState();
+      if (!loginState) {
         navigate('/');
         return;
       }
       try {
-        const docRef = doc(db, 'users', auth.currentUser.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists() && docSnap.data().onboardingCompleted) {
-          const data = docSnap.data();
+        const res = await db.collection('users').doc(auth.currentUser?.uid).get();
+        if (res.data && res.data.length > 0 && res.data[0].onboardingCompleted) {
+          const data = res.data[0];
           if (data.questionnaire) {
             setFormData({ ...INITIAL_FORM_DATA, ...data.questionnaire });
             setImportantQuestions(data.importantQuestions || []);
@@ -260,7 +258,8 @@ export default function Onboarding() {
   };
 
   const handleSubmit = async () => {
-    if (!auth.currentUser) return;
+    const loginState = await auth.getLoginState();
+    if (!loginState) return;
     setSaving(true);
     setError('');
 
@@ -291,8 +290,10 @@ export default function Onboarding() {
     }
 
     try {
-      const userRef = doc(db, 'users', auth.currentUser.uid);
-      await setDoc(userRef, {
+      const uid = auth.currentUser?.uid;
+      if (!uid) throw new Error('User not found');
+      
+      const updateData = {
         name: formData.name,
         bio: formData.bio,
         avatarUrl: formData.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${formData.name}`,
@@ -304,7 +305,18 @@ export default function Onboarding() {
         onboardingCompleted: true,
         isParticipating: false,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      };
+      
+      const res = await db.collection('users').doc(uid).get();
+      if (res.data && res.data.length > 0) {
+        await db.collection('users').doc(uid).update(updateData);
+      } else {
+        await db.collection('users').doc(uid).set({
+          uid,
+          ...updateData,
+          createdAt: new Date().toISOString()
+        });
+      }
       navigate('/matches');
     } catch (err: any) {
       setError(err.message || '保存失败，请重试');
@@ -402,12 +414,24 @@ export default function Onboarding() {
                   className="hidden"
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
-                    if (!file || !auth.currentUser) return;
+                    const loginState = await auth.getLoginState();
+                    if (!file || !loginState) return;
                     try {
-                      const storageRef = ref(storage, `avatars/${auth.currentUser.uid}_${Date.now()}`);
-                      await uploadBytes(storageRef, file);
-                      const url = await getDownloadURL(storageRef);
-                      setFormData({ ...formData, [q.id]: url });
+                      const uid = auth.currentUser?.uid;
+                      const cloudPath = `avatars/${uid}_${Date.now()}_${file.name}`;
+                      
+                      const res = await appInstance.uploadFile({
+                        cloudPath: cloudPath,
+                        filePath: file
+                      });
+                      
+                      const tempUrlRes = await appInstance.getTempFileURL({
+                        fileList: [res.fileID]
+                      });
+                      
+                      if (tempUrlRes.fileList && tempUrlRes.fileList.length > 0) {
+                        setFormData({ ...formData, [q.id]: tempUrlRes.fileList[0].tempFileURL });
+                      }
                     } catch (err) {
                       console.error("Upload failed", err);
                       alert("图片上传失败，请重试");

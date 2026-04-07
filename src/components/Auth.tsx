@@ -1,7 +1,5 @@
-import React, { useState } from 'react';
-import { auth, db } from '../firebase';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import React, { useState, useEffect } from 'react';
+import { auth, db } from '../cloudbase';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ArrowLeft } from 'lucide-react';
@@ -10,51 +8,145 @@ export default function Auth() {
   const location = useLocation();
   const [isLogin, setIsLogin] = useState(location.state?.isLogin ?? true);
   const [email, setEmail] = useState(location.state?.email || '');
-  const [campusCardNumber, setCampusCardNumber] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const [verifyOtpFn, setVerifyOtpFn] = useState<any>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (countdown > 0) {
+      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [countdown]);
+
+  useEffect(() => {
+    setError('');
+  }, [isLogin]);
+
+  const handleSendCode = async () => {
+    if (!email.endsWith('@lzu.edu.cn')) {
+      setError('必须使用 @lzu.edu.cn 邮箱');
+      return;
+    }
+    if (!username) {
+      setError('请先填写用户名');
+      return;
+    }
+    if (!password) {
+      setError('请先填写密码');
+      return;
+    }
+    setError('');
+    setSendingCode(true);
+    try {
+      const res = await auth.signUp({
+        email,
+        username,
+        password,
+      });
+      if (res.error) {
+        throw res.error;
+      }
+      if (res.data?.verifyOtp) {
+        setVerifyOtpFn(() => res.data.verifyOtp);
+        setCountdown(60);
+      }
+    } catch (err: any) {
+      setError(err.message || '发送验证码失败，请重试');
+    } finally {
+      setSendingCode(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    if (!email.endsWith('@lzu.edu.cn')) {
-      setError('必须使用 @lzu.edu.cn 邮箱注册或登录');
-      setLoading(false);
-      return;
-    }
-
-    if (!isLogin && !campusCardNumber) {
-      setError('注册需要填写校园卡号');
-      setLoading(false);
-      return;
-    }
-
     try {
       if (isLogin) {
-        const userCred = await signInWithEmailAndPassword(auth, email, password);
-        const userDoc = await getDoc(doc(db, 'users', userCred.user.uid));
-        if (userDoc.exists() && userDoc.data().onboardingCompleted) {
-          navigate('/matches');
-        } else {
+        if (!username || !password) {
+          setError('请输入用户名和密码');
+          setLoading(false);
+          return;
+        }
+        
+        const res = await auth.signInWithPassword({
+          username,
+          password,
+        });
+        
+        if (res.error) throw res.error;
+        
+        const uid = auth.currentUser?.uid;
+        if (!uid) throw new Error('认证失败');
+
+        const userRes = await db.collection('users').doc(uid).get();
+        const userExists = userRes.data && userRes.data.length > 0;
+
+        if (!userExists) {
+          // 如果是登录状态但用户不存在，则创建一个基础档案
+          await db.collection('users').doc(uid).set({
+            uid: uid,
+            username: username,
+            onboardingCompleted: false,
+            createdAt: new Date().toISOString()
+          });
           navigate('/onboarding');
+        } else {
+          if (userRes.data[0].onboardingCompleted) {
+            navigate('/matches');
+          } else {
+            navigate('/onboarding');
+          }
         }
       } else {
-        const userCred = await createUserWithEmailAndPassword(auth, email, password);
-        await setDoc(doc(db, 'users', userCred.user.uid), {
-          uid: userCred.user.uid,
-          email: email.toLowerCase(),
-          campusCardNumber: campusCardNumber,
-          onboardingCompleted: false,
-          createdAt: new Date().toISOString()
-        });
+        // 注册状态
+        if (!email.endsWith('@lzu.edu.cn')) {
+          setError('必须使用 @lzu.edu.cn 邮箱注册');
+          setLoading(false);
+          return;
+        }
+        if (!code) {
+          setError('请输入验证码');
+          setLoading(false);
+          return;
+        }
+        if (!verifyOtpFn) {
+          setError('请先获取验证码');
+          setLoading(false);
+          return;
+        }
+
+        const res = await verifyOtpFn({ token: code });
+        if (res.error) throw res.error;
+
+        const uid = auth.currentUser?.uid;
+        if (!uid) throw new Error('认证失败');
+
+        const userRes = await db.collection('users').doc(uid).get();
+        const userExists = userRes.data && userRes.data.length > 0;
+
+        if (!userExists) {
+          await db.collection('users').doc(uid).set({
+            uid: uid,
+            email: email.toLowerCase(),
+            username: username,
+            onboardingCompleted: false,
+            createdAt: new Date().toISOString()
+          });
+        }
         navigate('/onboarding');
       }
     } catch (err: any) {
-      setError(err.message || '认证失败，请重试');
+      setError(err.message || '认证失败，请检查输入是否正确');
     } finally {
       setLoading(false);
     }
@@ -63,7 +155,7 @@ export default function Auth() {
   return (
     <div 
       className="min-h-screen flex items-center justify-center p-6 relative bg-cover bg-center bg-no-repeat"
-      style={{ backgroundImage: 'url("/logback.jpg")', fontFamily: '"SimSun", "STSong", serif' }}
+      style={{ backgroundImage: 'url("/login-bg.jpg")', fontFamily: '"SimSun", "STSong", serif' }}
     >
       <Link 
         to="/" 
@@ -113,40 +205,81 @@ export default function Auth() {
             </div>
 
             <form className="space-y-5" onSubmit={handleSubmit}>
-              <div>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="校园邮箱 (@lzu.edu.cn)"
-                  className="w-full px-5 py-4 bg-white/20 border-2 border-black rounded-2xl focus:outline-none focus:border-black/60 transition-colors text-black placeholder:text-black/70 text-lg font-medium shadow-inner"
-                />
-              </div>
-
-              {!isLogin && (
-                <div>
-                  <input
-                    type="text"
-                    required
-                    value={campusCardNumber}
-                    onChange={(e) => setCampusCardNumber(e.target.value)}
-                    placeholder="校园卡号"
-                    className="w-full px-5 py-4 bg-white/20 border-2 border-black rounded-2xl focus:outline-none focus:border-black/60 transition-colors text-black placeholder:text-black/70 text-lg font-medium shadow-inner"
-                  />
-                </div>
+              {isLogin ? (
+                <>
+                  <div>
+                    <input
+                      type="text"
+                      required
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder="用户名"
+                      className="w-full px-5 py-4 bg-white/20 border-2 border-black rounded-2xl focus:outline-none focus:border-black/60 transition-colors text-black placeholder:text-black/70 text-lg font-medium shadow-inner"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="密码"
+                      className="w-full px-5 py-4 bg-white/20 border-2 border-black rounded-2xl focus:outline-none focus:border-black/60 transition-colors text-black placeholder:text-black/70 text-lg font-medium shadow-inner"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <input
+                      type="text"
+                      required
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder="设置用户名"
+                      className="w-full px-5 py-4 bg-white/20 border-2 border-black rounded-2xl focus:outline-none focus:border-black/60 transition-colors text-black placeholder:text-black/70 text-lg font-medium shadow-inner"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="设置密码"
+                      className="w-full px-5 py-4 bg-white/20 border-2 border-black rounded-2xl focus:outline-none focus:border-black/60 transition-colors text-black placeholder:text-black/70 text-lg font-medium shadow-inner"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="校园邮箱 (@lzu.edu.cn)"
+                      className="w-full px-5 py-4 bg-white/20 border-2 border-black rounded-2xl focus:outline-none focus:border-black/60 transition-colors text-black placeholder:text-black/70 text-lg font-medium shadow-inner"
+                    />
+                  </div>
+                  <div className="flex gap-3">
+                    <input
+                      type="text"
+                      required
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                      placeholder="邮箱验证码"
+                      className="flex-1 px-5 py-4 bg-white/20 border-2 border-black rounded-2xl focus:outline-none focus:border-black/60 transition-colors text-black placeholder:text-black/70 text-lg font-medium shadow-inner w-full"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSendCode}
+                      disabled={sendingCode || countdown > 0 || !email || !username || !password}
+                      className="px-6 py-4 bg-black text-white rounded-2xl font-bold text-lg transition-colors disabled:opacity-50 whitespace-nowrap"
+                    >
+                      {countdown > 0 ? `${countdown}s` : (sendingCode ? '发送中...' : '获取验证码')}
+                    </button>
+                  </div>
+                </>
               )}
-
-              <div>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="密码"
-                  className="w-full px-5 py-4 bg-white/20 border-2 border-black rounded-2xl focus:outline-none focus:border-black/60 transition-colors text-black placeholder:text-black/70 text-lg font-medium shadow-inner"
-                />
-              </div>
 
               {error && (
                 <div className="text-red-600 text-sm font-medium bg-red-50/80 px-4 py-3 rounded-xl border border-red-100">

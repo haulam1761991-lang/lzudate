@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth, storage } from '../firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, auth, appInstance } from '../cloudbase';
 import { motion, AnimatePresence } from 'motion/react';
 
 import { useNavigate } from 'react-router-dom';
@@ -16,23 +14,21 @@ export default function Profile() {
     name: '',
     bio: '',
     avatarUrl: '',
-    campusCardNumber: '',
     email: ''
   });
 
   useEffect(() => {
     const fetchProfile = async () => {
-      if (!auth.currentUser) return;
+      const loginState = await auth.getLoginState();
+      if (!loginState) return;
       try {
-        const docRef = doc(db, 'users', auth.currentUser.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
+        const res = await db.collection('users').doc(auth.currentUser?.uid).get();
+        if (res.data && res.data.length > 0) {
+          const data = res.data[0];
           setFormData({
             name: data.name || '',
             bio: data.bio || '',
             avatarUrl: data.avatarUrl || '',
-            campusCardNumber: data.campusCardNumber || '',
             email: data.email || ''
           });
         }
@@ -47,14 +43,16 @@ export default function Profile() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!auth.currentUser) return;
+    const loginState = await auth.getLoginState();
+    if (!loginState) return;
     
     setSaving(true);
     setMessage({ type: '', text: '' });
 
     try {
-      const userRef = doc(db, 'users', auth.currentUser.uid);
-      await updateDoc(userRef, {
+      const uid = auth.currentUser?.uid;
+      if (!uid) throw new Error('User not found');
+      await db.collection('users').doc(uid).update({
         name: formData.name,
         bio: formData.bio,
         avatarUrl: formData.avatarUrl
@@ -114,12 +112,24 @@ export default function Profile() {
                   className="hidden"
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
-                    if (!file || !auth.currentUser) return;
+                    const loginState = await auth.getLoginState();
+                    if (!file || !loginState) return;
                     try {
-                      const storageRef = ref(storage, `avatars/${auth.currentUser.uid}_${Date.now()}`);
-                      await uploadBytes(storageRef, file);
-                      const url = await getDownloadURL(storageRef);
-                      setFormData({ ...formData, avatarUrl: url });
+                      const uid = auth.currentUser?.uid;
+                      const cloudPath = `avatars/${uid}_${Date.now()}_${file.name}`;
+                      
+                      const res = await appInstance.uploadFile({
+                        cloudPath: cloudPath,
+                        filePath: file
+                      });
+                      
+                      const tempUrlRes = await appInstance.getTempFileURL({
+                        fileList: [res.fileID]
+                      });
+                      
+                      if (tempUrlRes.fileList && tempUrlRes.fileList.length > 0) {
+                        setFormData({ ...formData, avatarUrl: tempUrlRes.fileList[0].tempFileURL });
+                      }
                     } catch (err) {
                       console.error("Upload failed", err);
                       alert("图片上传失败，请重试");
@@ -155,14 +165,10 @@ export default function Profile() {
 
           <div className="bg-gray-50 p-6 rounded-2xl border-2 border-gray-100">
             <h4 className="text-sm font-bold text-black mb-4">已认证信息</h4>
-            <div className="grid sm:grid-cols-2 gap-4">
+            <div className="grid sm:grid-cols-1 gap-4">
               <div>
                 <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">校园邮箱</label>
                 <div className="text-sm font-bold text-black">{formData.email}</div>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">校园卡号</label>
-                <div className="text-sm font-bold text-black">{formData.campusCardNumber}</div>
               </div>
             </div>
           </div>

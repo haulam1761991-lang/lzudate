@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../firebase';
-import { collection, query, where, getDocs, doc, getDoc, setDoc, updateDoc, addDoc, onSnapshot } from 'firebase/firestore';
+import { db, auth } from '../cloudbase';
 import { motion, AnimatePresence } from 'motion/react';
 import MatchAIChat from './MatchAIChat';
 import AIChatOnboarding from './AIChatOnboarding';
@@ -37,9 +36,12 @@ export default function Matches() {
   const [revealedEmails, setRevealedEmails] = useState<Record<string, boolean>>({});
 
   const handleTrainAI = async (summary: string) => {
-    if (!auth.currentUser) return;
+    const loginState = await auth.getLoginState();
+    if (!loginState) return;
     try {
-      await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+      const uid = auth.currentUser?.uid;
+      if (!uid) return;
+      await db.collection('users').doc(uid).update({
         aiSummary: summary
       });
       setTimeout(() => {
@@ -58,11 +60,24 @@ export default function Matches() {
 
   const handleShoot = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!auth.currentUser || !shootEmail) return;
+    const loginState = await auth.getLoginState();
+    if (!loginState || !shootEmail) return;
     try {
-      await addDoc(collection(db, 'drops'), {
-        fromUserId: auth.currentUser.uid,
-        fromEmail: auth.currentUser.email,
+      const uid = auth.currentUser?.uid;
+      // Note: CloudBase auth doesn't expose email directly on currentUser in all cases,
+      // you might need to fetch it from the user document if it's not available.
+      // Assuming it's stored in the users collection.
+      const userRes = await db.collection('users').doc(uid).get();
+      const userEmail = userRes.data && userRes.data.length > 0 ? (userRes.data[0].email || '') : '';
+
+      if (!userEmail) {
+        setModeMessage({ text: '发送失败: 请先在个人档案中设置你的校园邮箱。', type: 'error' });
+        return;
+      }
+
+      await db.collection('drops').add({
+        fromUserId: uid,
+        fromEmail: userEmail,
         toEmail: shootEmail.toLowerCase(),
         message: shootMessageText,
         createdAt: new Date().toISOString(),
@@ -83,10 +98,12 @@ export default function Matches() {
 
   const handleCupid = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!auth.currentUser || !cupidEmail1 || !cupidEmail2) return;
+    const loginState = await auth.getLoginState();
+    if (!loginState || !cupidEmail1 || !cupidEmail2) return;
     try {
-      await addDoc(collection(db, 'cupid_matches'), {
-        cupidUserId: auth.currentUser.uid,
+      const uid = auth.currentUser?.uid;
+      await db.collection('cupid_matches').add({
+        cupidUserId: uid,
         email1: cupidEmail1.toLowerCase(),
         email2: cupidEmail2.toLowerCase(),
         message: cupidMessageText,
@@ -107,41 +124,50 @@ export default function Matches() {
   };
 
   const fetchData = async () => {
-    if (!auth.currentUser || !auth.currentUser.email) return;
-    const currentUid = auth.currentUser.uid;
-    const currentEmail = auth.currentUser.email.toLowerCase();
+    const loginState = await auth.getLoginState();
+    if (!loginState) return;
+    const currentUid = auth.currentUser?.uid;
+    if (!currentUid) return;
 
     try {
-      // Fetch user participation status
-      const userDoc = await getDoc(doc(db, 'users', currentUid));
-      if (userDoc.exists()) {
-        setIsParticipating(userDoc.data().isParticipating || false);
+      // Fetch user participation status and email
+      const userRes = await db.collection('users').doc(currentUid).get();
+      let currentEmail = '';
+      if (userRes.data && userRes.data.length > 0) {
+        setIsParticipating(userRes.data[0].isParticipating || false);
+        currentEmail = userRes.data[0].email?.toLowerCase() || '';
       }
 
       // Fetch archived matches to filter them out
-      const archivedQuery = query(collection(db, 'archived_matches'), where('userId', '==', currentUid));
-      const archivedSnapshot = await getDocs(archivedQuery);
-      const archivedUids = archivedSnapshot.docs.map(d => d.data().matchUid);
+      const archivedRes = await db.collection('archived_matches').where({ userId: currentUid }).get();
+      const archivedUids = (archivedRes.data || []).map((d: any) => d.matchUid);
 
       const matchProfiles: MatchProfile[] = [];
 
       // 1. Fetch regular matches
-      const matchesQuery = query(
-        collection(db, 'matches'),
-        where('users', 'array-contains', currentUid)
-      );
-      const matchesSnapshot = await getDocs(matchesQuery);
+      // CloudBase doesn't have array-contains, we might need a different query strategy
+      // For now, we'll fetch all matches and filter client-side if array-contains is not supported
+      // Alternatively, if users array is indexed, we can try to query it.
+      // Assuming we can query by array field containing a value in CloudBase (it usually supports it via where({ users: currentUid }))
+      // Let's try fetching all and filtering for safety if the query fails, but ideally we should query.
+      // Cloudbase JS SDK supports querying arrays: .where({ users: db.command.in([currentUid]) }) or similar.
+      // Actually, for array contains, CloudBase uses db.command.in or just passing the value if it's an array field.
+      // Let's fetch all matches where currentUid is in the users array.
+      const _ = db.command;
+      const matchesRes = await db.collection('matches').where({
+        users: currentUid // CloudBase often allows this for array-contains
+      }).get();
       
-      for (const matchDoc of matchesSnapshot.docs) {
-        const users = matchDoc.data().users as string[];
+      for (const matchDoc of matchesRes.data || []) {
+        const users = matchDoc.users as string[];
         const otherUid = users.find(id => id !== currentUid);
         
         if (otherUid && !archivedUids.includes(otherUid)) {
-          const otherUserDoc = await getDoc(doc(db, 'users', otherUid));
-          if (otherUserDoc.exists()) {
-            const userData = otherUserDoc.data();
+          const otherUserRes = await db.collection('users').doc(otherUid).get();
+          if (otherUserRes.data && otherUserRes.data.length > 0) {
+            const userData = otherUserRes.data[0];
             matchProfiles.push({
-              uid: userData.uid,
+              uid: userData.uid || userData._id,
               name: userData.name,
               avatarUrl: userData.avatarUrl,
               bio: userData.bio,
@@ -151,59 +177,57 @@ export default function Matches() {
               college: userData.questionnaire?.college,
               grade: userData.questionnaire?.grade,
               gender: userData.questionnaire?.gender,
-              compatibilityScore: matchDoc.data().similarityScore ? Math.round(matchDoc.data().similarityScore * 100) : (matchDoc.data().compatibilityScore || Math.floor(Math.random() * 20) + 80),
-              aiReasoning: matchDoc.data().aiReasoning || '你们在生活方式和价值观上有很高的契合度。',
+              compatibilityScore: matchDoc.similarityScore ? Math.round(matchDoc.similarityScore * 100) : (matchDoc.compatibilityScore || Math.floor(Math.random() * 20) + 80),
+              aiReasoning: matchDoc.aiReasoning || '你们在生活方式和价值观上有很高的契合度。',
               isDropMatch: false,
-              matchDocId: matchDoc.id
+              matchDocId: matchDoc._id
             });
           }
         }
       }
 
       // 2. Fetch mutual drops
-      const myDropsQuery = query(collection(db, 'drops'), where('fromUserId', '==', currentUid));
-      const myDropsSnapshot = await getDocs(myDropsQuery);
+      const myDropsRes = await db.collection('drops').where({ fromUserId: currentUid }).get();
       
-      for (const dropDoc of myDropsSnapshot.docs) {
-        const toEmail = dropDoc.data().toEmail;
-        const reverseQuery = query(
-        collection(db, 'drops'), 
-        where('fromEmail', '==', toEmail),
-        where('toEmail', '==', currentEmail)
-      );
+      for (const dropDoc of myDropsRes.data || []) {
+        const toEmail = dropDoc.toEmail;
+        if (!toEmail || !currentEmail) continue;
+
+        const reverseRes = await db.collection('drops').where({
+          fromEmail: toEmail,
+          toEmail: currentEmail
+        }).get();
       
-      try {
-        const reverseSnapshot = await getDocs(reverseQuery);
-        if (!reverseSnapshot.empty) {
-          const usersSnapshot = await getDocs(collection(db, 'users'));
-          const matchedUserDoc = usersSnapshot.docs.find(d => d.data().email?.toLowerCase() === toEmail.toLowerCase());
-          
-          if (matchedUserDoc) {
-            const userData = matchedUserDoc.data();
-              if (!archivedUids.includes(userData.uid) && !matchProfiles.some(p => p.uid === userData.uid)) {
-                matchProfiles.push({
-                  uid: userData.uid,
-                  name: userData.name,
-                  avatarUrl: userData.avatarUrl,
-                  bio: userData.bio,
-                  email: userData.email,
-                  displayProfile: userData.displayProfile,
-                  aiSummary: userData.aiSummary,
-                  college: userData.questionnaire?.college,
-                  grade: userData.questionnaire?.grade,
-                  gender: userData.questionnaire?.gender,
-                  compatibilityScore: 100, // Mutual drop is 100%
-                  aiReasoning: '你们互相暗恋了对方！这就是最好的推荐理由。',
-                  isDropMatch: true
-                });
+        try {
+          if (reverseRes.data && reverseRes.data.length > 0) {
+            const usersRes = await db.collection('users').where({ email: toEmail }).get();
+            const matchedUserDoc = usersRes.data && usersRes.data.length > 0 ? usersRes.data[0] : null;
+            
+            if (matchedUserDoc) {
+              const userData = matchedUserDoc;
+              const targetUid = userData.uid || userData._id;
+                if (!archivedUids.includes(targetUid) && !matchProfiles.some(p => p.uid === targetUid)) {
+                  matchProfiles.push({
+                    uid: targetUid,
+                    name: userData.name,
+                    avatarUrl: userData.avatarUrl,
+                    bio: userData.bio,
+                    email: userData.email,
+                    displayProfile: userData.displayProfile,
+                    aiSummary: userData.aiSummary,
+                    college: userData.questionnaire?.college,
+                    grade: userData.questionnaire?.grade,
+                    gender: userData.questionnaire?.gender,
+                    compatibilityScore: 100, // Mutual drop is 100%
+                    aiReasoning: '你们互相暗恋了对方！这就是最好的推荐理由。',
+                    isDropMatch: true
+                  });
+                }
               }
             }
-          }
-        } catch (err: any) {
-          if (err.code !== 'permission-denied') {
+          } catch (err: any) {
             console.error("Error checking reverse drop:", err);
           }
-        }
       }
 
       // 3. Fetch cupid matches is moved to Mailbox.tsx
@@ -225,38 +249,64 @@ export default function Matches() {
   useEffect(() => {
     if (matches.length === 0) return;
     
-    const unsubscribes = matches.map(match => {
-      return onSnapshot(doc(db, 'users', match.uid), (docSnap) => {
-        if (docSnap.exists()) {
-          const userData = docSnap.data();
-          setMatches(prevMatches => prevMatches.map(m => {
-            if (m.uid === match.uid) {
-              return {
-                ...m,
-                name: userData.name,
-                avatarUrl: userData.avatarUrl,
-                bio: userData.bio,
-                displayProfile: userData.displayProfile,
-                aiSummary: userData.aiSummary,
-              };
+    // CloudBase watch (realtime)
+    let watchers: any[] = [];
+    
+    const setupWatchers = async () => {
+      for (const match of matches) {
+        try {
+          const watcher = db.collection('users').doc(match.uid).watch({
+            onChange: (snapshot: any) => {
+              if (snapshot.docs && snapshot.docs.length > 0) {
+                const userData = snapshot.docs[0];
+                setMatches(prevMatches => prevMatches.map(m => {
+                  if (m.uid === match.uid) {
+                    return {
+                      ...m,
+                      name: userData.name,
+                      avatarUrl: userData.avatarUrl,
+                      bio: userData.bio,
+                      displayProfile: userData.displayProfile,
+                      aiSummary: userData.aiSummary,
+                    };
+                  }
+                  return m;
+                }));
+              }
+            },
+            onError: (err: any) => {
+              console.error('Watch error', err);
             }
-            return m;
-          }));
+          });
+          watchers.push(watcher);
+        } catch (e) {
+          console.error("Failed to setup watcher", e);
         }
-      });
-    });
+      }
+    };
+    
+    setupWatchers();
 
     return () => {
-      unsubscribes.forEach(unsub => unsub());
+      // CloudBase watchers need to be closed
+      watchers.forEach(watcher => {
+        if (watcher && typeof watcher.close === 'function') {
+          watcher.close();
+        }
+      });
     };
   }, [matches.map(m => m.uid).join(',')]);
 
   const toggleParticipation = async () => {
-    if (!auth.currentUser) return;
+    const loginState = await auth.getLoginState();
+    if (!loginState) return;
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
     const newState = !isParticipating;
     setIsParticipating(newState);
     try {
-      await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+      await db.collection('users').doc(uid).update({
         isParticipating: newState
       });
     } catch (err) {
@@ -266,11 +316,15 @@ export default function Matches() {
   };
 
   const handleFeedback = async (match: MatchProfile, status: 'satisfied' | 'unsatisfied') => {
-    if (!auth.currentUser) return;
+    const loginState = await auth.getLoginState();
+    if (!loginState) return;
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
     setArchiving(true);
     try {
-      await addDoc(collection(db, 'archived_matches'), {
-        userId: auth.currentUser.uid,
+      await db.collection('archived_matches').add({
+        userId: uid,
         matchUid: match.uid,
         status,
         archivedAt: new Date().toISOString()

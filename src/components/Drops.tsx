@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../firebase';
-import { collection, query, where, getDocs, doc, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
+import { db, auth } from '../cloudbase';
 import { Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -22,13 +21,16 @@ export default function Drops() {
   }, []);
 
   const fetchMyDrops = async () => {
-    if (!auth.currentUser) return;
+    const loginState = await auth.getLoginState();
+    if (!loginState) return;
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
     try {
-      const q = query(collection(db, 'drops'), where('fromUserId', '==', auth.currentUser.uid));
-      const querySnapshot = await getDocs(q);
-      const dropsData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
+      const res = await db.collection('drops').where({ fromUserId: uid }).get();
+      const dropsData = (res.data || []).map((doc: any) => ({
+        id: doc._id,
+        ...doc
       })) as Drop[];
       setMyDrops(dropsData.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
     } catch (err) {
@@ -43,7 +45,26 @@ export default function Drops() {
     setError('');
     setSuccess('');
 
-    if (!auth.currentUser || !auth.currentUser.email) return;
+    const loginState = await auth.getLoginState();
+    if (!loginState) return;
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
+    // Fetch current user's email
+    let currentUserEmail = '';
+    try {
+      const userRes = await db.collection('users').doc(uid).get();
+      if (userRes.data && userRes.data.length > 0) {
+        currentUserEmail = userRes.data[0].email || '';
+      }
+    } catch (err) {
+      console.error("Error fetching user email", err);
+    }
+
+    if (!currentUserEmail) {
+      setError("无法获取你的邮箱信息。");
+      return;
+    }
     
     const targetEmail = emailInput.trim().toLowerCase();
 
@@ -52,7 +73,7 @@ export default function Drops() {
       return;
     }
 
-    if (targetEmail === auth.currentUser.email) {
+    if (targetEmail === currentUserEmail) {
       setError("你不能暗恋你自己。");
       return;
     }
@@ -63,19 +84,19 @@ export default function Drops() {
     }
 
     try {
-      const dropId = `${auth.currentUser.email}_${targetEmail}`;
-      await setDoc(doc(db, 'drops', dropId), {
-        fromUserId: auth.currentUser.uid,
-        fromEmail: auth.currentUser.email,
+      const dropId = `${currentUserEmail}_${targetEmail}`;
+      await db.collection('drops').doc(dropId).set({
+        fromUserId: uid,
+        fromEmail: currentUserEmail,
         toEmail: targetEmail,
         timestamp: new Date().toISOString()
       });
 
       // Check mutual drop
-      const reverseDropId = `${targetEmail}_${auth.currentUser.email}`;
-      const reverseDropSnap = await getDoc(doc(db, 'drops', reverseDropId));
+      const reverseDropId = `${targetEmail}_${currentUserEmail}`;
+      const reverseDropRes = await db.collection('drops').doc(reverseDropId).get();
       
-      if (reverseDropSnap.exists()) {
+      if (reverseDropRes.data && reverseDropRes.data.length > 0) {
         setSuccess(`匹配成功！你们互相暗恋了对方。快去匹配页看看吧！`);
       } else {
         setSuccess('心意已投递。只有当TA也投递了你，TA才会知道。');
@@ -90,7 +111,7 @@ export default function Drops() {
 
   const handleDeleteDrop = async (dropId: string) => {
     try {
-      await deleteDoc(doc(db, 'drops', dropId));
+      await db.collection('drops').doc(dropId).remove();
       setMyDrops(myDrops.filter(drop => drop.id !== dropId));
     } catch (err) {
       console.error("Error deleting drop:", err);

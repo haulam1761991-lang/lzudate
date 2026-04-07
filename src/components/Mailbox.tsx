@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../firebase';
-import { collection, query, where, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { db, auth } from '../cloudbase';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, MessageCircle, X } from 'lucide-react';
 import MatchAIChat from './MatchAIChat';
@@ -31,28 +30,31 @@ export default function Mailbox() {
 
   useEffect(() => {
     const fetchArchived = async () => {
-      if (!auth.currentUser) return;
-      const currentUid = auth.currentUser.uid;
+      const loginState = await auth.getLoginState();
+      if (!loginState) return;
+      const currentUid = auth.currentUser?.uid;
+      if (!currentUid) return;
 
       try {
-        const currentEmail = auth.currentUser.email;
-        const archivedQuery = query(
-          collection(db, 'archived_matches'),
-          where('userId', '==', currentUid)
-        );
-        const snapshot = await getDocs(archivedQuery);
+        let currentEmail = '';
+        const userRes = await db.collection('users').doc(currentUid).get();
+        if (userRes.data && userRes.data.length > 0) {
+          currentEmail = userRes.data[0].email || '';
+        }
+
+        const archivedRes = await db.collection('archived_matches').where({ userId: currentUid }).get();
         
         const profiles: ArchivedMatch[] = [];
         const archivedUids: string[] = [];
         
-        for (const docSnap of snapshot.docs) {
-          const data = docSnap.data();
+        for (const docSnap of archivedRes.data || []) {
+          const data = docSnap;
           archivedUids.push(data.matchUid);
-          const userDoc = await getDoc(doc(db, 'users', data.matchUid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
+          const otherUserRes = await db.collection('users').doc(data.matchUid).get();
+          if (otherUserRes.data && otherUserRes.data.length > 0) {
+            const userData = otherUserRes.data[0];
             profiles.push({
-              uid: userData.uid,
+              uid: userData.uid || userData._id,
               name: userData.name,
               avatarUrl: userData.avatarUrl,
               bio: userData.bio,
@@ -70,16 +72,15 @@ export default function Mailbox() {
           }
         }
 
-        const sharedChatsQuery = query(collection(db, 'shared_chats'), where('toUserId', '==', currentUid));
-        const sharedChatsSnapshot = await getDocs(sharedChatsQuery);
+        const sharedChatsRes = await db.collection('shared_chats').where({ toUserId: currentUid }).get();
         
-        for (const chatDoc of sharedChatsSnapshot.docs) {
-          const data = chatDoc.data();
-          const fromUserDoc = await getDoc(doc(db, 'users', data.fromUserId));
-          if (fromUserDoc.exists()) {
-            const userData = fromUserDoc.data();
+        for (const chatDoc of sharedChatsRes.data || []) {
+          const data = chatDoc;
+          const fromUserRes = await db.collection('users').doc(data.fromUserId).get();
+          if (fromUserRes.data && fromUserRes.data.length > 0) {
+            const userData = fromUserRes.data[0];
             profiles.push({
-              uid: userData.uid,
+              uid: userData.uid || userData._id,
               name: userData.name,
               avatarUrl: userData.avatarUrl,
               bio: userData.bio,
@@ -99,26 +100,24 @@ export default function Mailbox() {
         }
 
         if (currentEmail) {
-          const cupidQuery1 = query(collection(db, 'cupid_matches'), where('email1', '==', currentEmail));
-          const cupidSnapshot1 = await getDocs(cupidQuery1);
+          const cupidRes1 = await db.collection('cupid_matches').where({ email1: currentEmail }).get();
+          const cupidRes2 = await db.collection('cupid_matches').where({ email2: currentEmail }).get();
           
-          const cupidQuery2 = query(collection(db, 'cupid_matches'), where('email2', '==', currentEmail));
-          const cupidSnapshot2 = await getDocs(cupidQuery2);
-          
-          const allCupidDocs = [...cupidSnapshot1.docs, ...cupidSnapshot2.docs];
+          const allCupidDocs = [...(cupidRes1.data || []), ...(cupidRes2.data || [])];
           
           for (const cupidDoc of allCupidDocs) {
-            const data = cupidDoc.data();
+            const data = cupidDoc;
             const otherEmail = data.email1 === currentEmail ? data.email2 : data.email1;
             
-            const usersSnapshot = await getDocs(collection(db, 'users'));
-            const matchedUserDoc = usersSnapshot.docs.find(d => d.data().email?.toLowerCase() === otherEmail.toLowerCase());
+            const usersRes = await db.collection('users').where({ email: otherEmail }).get();
+            const matchedUserDoc = usersRes.data && usersRes.data.length > 0 ? usersRes.data[0] : null;
             
             if (matchedUserDoc) {
-              const userData = matchedUserDoc.data();
-              if (!archivedUids.includes(userData.uid) && !profiles.some(p => p.uid === userData.uid)) {
+              const userData = matchedUserDoc;
+              const targetUid = userData.uid || userData._id;
+              if (!archivedUids.includes(targetUid) && !profiles.some(p => p.uid === targetUid)) {
                 profiles.push({
-                  uid: userData.uid,
+                  uid: targetUid,
                   name: userData.name,
                   avatarUrl: userData.avatarUrl,
                   bio: userData.bio,
@@ -154,43 +153,63 @@ export default function Mailbox() {
   useEffect(() => {
     if (archived.length === 0) return;
     
-    const unsubscribes = archived.map(match => {
-      return onSnapshot(doc(db, 'users', match.uid), (docSnap) => {
-        if (docSnap.exists()) {
-          const userData = docSnap.data();
-          setArchived(prevArchived => prevArchived.map(m => {
-            if (m.uid === match.uid) {
-              return {
-                ...m,
-                name: userData.name,
-                avatarUrl: userData.avatarUrl,
-                bio: userData.bio,
-                displayProfile: userData.displayProfile,
-                aiSummary: userData.aiSummary,
-              };
+    let watchers: any[] = [];
+    
+    const setupWatchers = async () => {
+      for (const match of archived) {
+        try {
+          const watcher = db.collection('users').doc(match.uid).watch({
+            onChange: (snapshot: any) => {
+              if (snapshot.docs && snapshot.docs.length > 0) {
+                const userData = snapshot.docs[0];
+                setArchived(prevArchived => prevArchived.map(m => {
+                  if (m.uid === match.uid) {
+                    return {
+                      ...m,
+                      name: userData.name,
+                      avatarUrl: userData.avatarUrl,
+                      bio: userData.bio,
+                      displayProfile: userData.displayProfile,
+                      aiSummary: userData.aiSummary,
+                    };
+                  }
+                  return m;
+                }));
+                
+                setSelectedMatch(prevSelected => {
+                  if (prevSelected && prevSelected.uid === match.uid) {
+                    return {
+                      ...prevSelected,
+                      name: userData.name,
+                      avatarUrl: userData.avatarUrl,
+                      bio: userData.bio,
+                      displayProfile: userData.displayProfile,
+                      aiSummary: userData.aiSummary,
+                    };
+                  }
+                  return prevSelected;
+                });
+              }
+            },
+            onError: (err: any) => {
+              console.error('Watch error', err);
             }
-            return m;
-          }));
-          
-          setSelectedMatch(prevSelected => {
-            if (prevSelected && prevSelected.uid === match.uid) {
-              return {
-                ...prevSelected,
-                name: userData.name,
-                avatarUrl: userData.avatarUrl,
-                bio: userData.bio,
-                displayProfile: userData.displayProfile,
-                aiSummary: userData.aiSummary,
-              };
-            }
-            return prevSelected;
           });
+          watchers.push(watcher);
+        } catch (e) {
+          console.error("Failed to setup watcher", e);
         }
-      });
-    });
+      }
+    };
+    
+    setupWatchers();
 
     return () => {
-      unsubscribes.forEach(unsub => unsub());
+      watchers.forEach(watcher => {
+        if (watcher && typeof watcher.close === 'function') {
+          watcher.close();
+        }
+      });
     };
   }, [archived.map(m => m.uid).join(',')]);
 
