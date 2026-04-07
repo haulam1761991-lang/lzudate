@@ -173,7 +173,7 @@ export default function Landing() {
             viewport={{ once: true }}
             className="relative h-[28rem] rounded-[2rem] overflow-hidden group"
           >
-            <img src="/2-sm.webp" alt="Bench" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+            <img src="/2.png" alt="Bench" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
             
             <div className="relative z-10 p-10 sm:p-16 h-full flex flex-col justify-center max-w-xl">
               <h3 className="text-4xl sm:text-5xl text-white mb-4 font-bold drop-shadow-lg">告诉我们关于你的事</h3>
@@ -188,7 +188,7 @@ export default function Landing() {
             viewport={{ once: true }}
             className="relative h-[28rem] rounded-[2rem] overflow-hidden group"
           >
-            <img src="/3-sm.webp" alt="Beach" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+            <img src="/3.jpg" alt="Beach" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
             
             <div className="relative z-10 p-10 sm:p-16 h-full flex flex-col justify-center max-w-xl">
               <h3 className="text-4xl sm:text-5xl text-white mb-4 font-bold drop-shadow-lg">每周参与匹配</h3>
@@ -203,7 +203,7 @@ export default function Landing() {
             viewport={{ once: true }}
             className="relative h-[28rem] rounded-[2rem] overflow-hidden group"
           >
-            <img src="/4-sm.webp" alt="Couple" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+            <img src="/4.png" alt="Couple" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
             
             <div className="relative z-10 p-10 sm:p-16 h-full flex flex-col justify-center max-w-xl">
               <h3 className="text-4xl sm:text-5xl text-white mb-4 font-bold drop-shadow-lg ml-0">去约会吧！</h3>
@@ -222,7 +222,7 @@ export default function Landing() {
           {/* Left: Library Image */}
           <div className="relative h-[400px] sm:h-[500px] rounded-[2rem] overflow-hidden shadow-xl group">
             <img 
-              src="/library-sm.webp" 
+              src="/library.jpg" 
               alt="Library" 
               className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
               referrerPolicy="no-referrer" 
