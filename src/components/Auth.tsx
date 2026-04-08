@@ -75,7 +75,11 @@ export default function Auth() {
         setCountdown(60);
       }
     } catch (err: any) {
-      setError(err.message || '发送验证码失败，请重试');
+      let errorMsg = err.message || '发送验证码失败，请重试';
+      if (errorMsg.toLowerCase().includes('username')) {
+        errorMsg = '用户名需要是小写字母和数字哦';
+      }
+      setError(errorMsg);
     } finally {
       setSendingCode(false);
     }
@@ -162,7 +166,11 @@ export default function Auth() {
         navigate('/onboarding');
       }
     } catch (err: any) {
-      setError(err.message || '认证失败，请检查输入是否正确');
+      let errorMsg = err.message || '认证失败，请检查输入是否正确';
+      if (errorMsg.toLowerCase().includes('username')) {
+        errorMsg = '用户名需要是小写字母和数字哦';
+      }
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
