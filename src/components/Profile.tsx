@@ -103,12 +103,12 @@ export default function Profile() {
       <motion.div 
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-3xl shadow-sm border-2 border-gray-100 p-6 sm:p-10"
+        className="bg-white/20 backdrop-blur-md border border-white/30 rounded-3xl shadow-xl p-6 sm:p-10"
       >
         <form onSubmit={handleSubmit} className="space-y-8">
           
-          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-8 pb-8 border-b-2 border-gray-100">
-            <div className="w-32 h-32 rounded-full overflow-hidden bg-gray-100 border-2 border-gray-200">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-8 pb-8 border-b border-white/20">
+            <div className="w-32 h-32 rounded-full overflow-hidden bg-white/30 border-2 border-white/40">
               <img
                 className="w-full h-full object-cover"
                 src={formData.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${formData.name}`}
@@ -118,7 +118,7 @@ export default function Profile() {
             </div>
             <div className="flex-1 w-full flex flex-col items-start">
               <label className="block text-sm font-bold text-black mb-2">上传头像</label>
-              <label className="cursor-pointer px-6 py-3 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-colors">
+              <label className="cursor-pointer px-6 py-3 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-md">
                 选择图片
                 <input
                   type="file"
@@ -162,7 +162,7 @@ export default function Profile() {
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({...formData, name: e.target.value})}
-                className="w-full px-5 py-4 bg-gray-50 border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-black transition-colors text-black font-medium"
+                className="w-full px-5 py-4 bg-white/30 border border-white/40 rounded-2xl focus:outline-none focus:border-black transition-colors text-black font-medium shadow-inner"
               />
             </div>
 
@@ -172,16 +172,16 @@ export default function Profile() {
                 rows={4}
                 value={formData.bio}
                 onChange={(e) => setFormData({...formData, bio: e.target.value})}
-                className="w-full px-5 py-4 bg-gray-50 border-2 border-gray-200 rounded-2xl focus:outline-none focus:border-black transition-colors text-black font-medium resize-none"
+                className="w-full px-5 py-4 bg-white/30 border border-white/40 rounded-2xl focus:outline-none focus:border-black transition-colors text-black font-medium resize-none shadow-inner"
               />
             </div>
           </div>
 
-          <div className="bg-gray-50 p-6 rounded-2xl border-2 border-gray-100">
+         <div className="bg-white/30 p-6 rounded-2xl border border-white/40 shadow-inner">
             <h4 className="text-sm font-bold text-black mb-4">已认证信息</h4>
             <div className="grid sm:grid-cols-1 gap-4">
               <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">校园邮箱</label>
+                <label className="block text-xs font-bold text-gray-600 uppercase tracking-widest mb-1">校园邮箱</label>
                 <div className="text-sm font-bold text-black">{formData.email}</div>
               </div>
             </div>
