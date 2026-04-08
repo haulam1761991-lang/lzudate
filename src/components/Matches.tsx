@@ -751,8 +751,8 @@ export default function Matches() {
         </div>
       )}
 
-      {/* Mobile Stats Section */}
-      <div className="sm:hidden mt-12 mb-8 text-center bg-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/10 shadow-xl">
+      {/* Stats Section */}
+      <div className="mt-12 mb-8 text-center bg-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/10 shadow-xl">
         <h4 className="text-lg font-extrabold text-black mb-4">平台实时数据</h4>
         <div className="flex justify-around items-center">
           <div className="flex flex-col items-center">
