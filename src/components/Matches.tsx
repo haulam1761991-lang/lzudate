@@ -34,6 +34,26 @@ export default function Matches() {
   const [showTrainModal, setShowTrainModal] = useState(false);
   const [showFailedMatchScreen, setShowFailedMatchScreen] = useState(false);
   const [revealedEmails, setRevealedEmails] = useState<Record<string, boolean>>({});
+  const [activeUsersCount, setActiveUsersCount] = useState<number>(128);
+  const [matchedPairsCount, setMatchedPairsCount] = useState<number>(0);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const usersRes = await db.collection('users').where({ isParticipating: true }).get();
+        if (usersRes.data) {
+          setActiveUsersCount(usersRes.data.length);
+        }
+        const matchesRes = await db.collection('matches').get();
+        if (matchesRes.data) {
+          setMatchedPairsCount(matchesRes.data.length);
+        }
+      } catch (err) {
+        console.error("Failed to fetch stats:", err);
+      }
+    };
+    fetchStats();
+  }, []);
 
   const handleTrainAI = async (summary: string) => {
     const loginState = await auth.getLoginState();
@@ -731,6 +751,22 @@ export default function Matches() {
         </div>
       )}
 
+      {/* Mobile Stats Section */}
+      <div className="sm:hidden mt-12 mb-8 text-center bg-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/10 shadow-xl">
+        <h4 className="text-lg font-extrabold text-black mb-4">平台实时数据</h4>
+        <div className="flex justify-around items-center">
+          <div className="flex flex-col items-center">
+            <span className="text-3xl font-black text-black">{activeUsersCount}</span>
+            <span className="text-xs font-bold text-gray-800 uppercase tracking-widest mt-1">活跃用户</span>
+          </div>
+          <div className="w-px h-10 bg-white/20"></div>
+          <div className="flex flex-col items-center">
+            <span className="text-3xl font-black text-black">{matchedPairsCount}</span>
+            <span className="text-xs font-bold text-gray-800 uppercase tracking-widest mt-1">成功匹配对数</span>
+          </div>
+        </div>
+      </div>
+        
       <AnimatePresence>
         {activeChatMatch && (
           <MatchAIChat
