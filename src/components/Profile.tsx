@@ -84,20 +84,6 @@ export default function Profile() {
     <div className="max-w-2xl mx-auto">
       <div className="mb-10 flex justify-between items-end">
         <h2 className="text-4xl font-extrabold text-black tracking-tight">个人主页</h2>
-        <div className="flex gap-2">
-        <button 
-          onClick={() => navigate('/onboarding')}
-          className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-black rounded-xl font-bold transition-colors text-sm"
-        >
-          修改个性化档案
-        </button>
-        <button 
-            onClick={handleLogout}
-            className="sm:hidden px-6 py-3 bg-red-100 hover:bg-red-200 text-red-600 rounded-xl font-bold transition-colors text-sm"
-          >
-            退出登录
-          </button>
-        </div>
       </div>
 
       <motion.div 
@@ -214,6 +200,21 @@ export default function Profile() {
           </div>
         </form>
       </motion.div>
+      
+      <div className="mt-8 flex flex-col sm:flex-row gap-4">
+        <button 
+          onClick={() => navigate('/onboarding')}
+          className="flex-1 px-6 py-4 bg-white/20 backdrop-blur-md border border-white/30 text-black rounded-2xl font-bold transition-colors shadow-sm hover:bg-white/30"
+        >
+          修改个性化档案
+        </button>
+        <button 
+          onClick={handleLogout}
+          className="flex-1 px-6 py-4 bg-white/20 backdrop-blur-md border border-white/30 text-black rounded-2xl font-bold transition-colors shadow-sm hover:bg-white/30"
+        >
+          退出
+        </button>
+      </div>
     </div>
   );
 }
