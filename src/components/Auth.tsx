@@ -16,7 +16,23 @@ export default function Auth() {
   const [sendingCode, setSendingCode] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [verifyOtpFn, setVerifyOtpFn] = useState<any>(null);
+  const [activeUsersCount, setActiveUsersCount] = useState<number>(128);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchActiveUsers = async () => {
+      try {
+        const res = await db.collection('users').where({ isParticipating: true }).get();
+        if (res.data) {
+          setActiveUsersCount(res.data.length);
+        }
+      } catch (err) {
+        console.error("Failed to fetch active users count:", err);
+      }
+    };
+    fetchActiveUsers();
+  }, []);
+
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -184,7 +200,7 @@ export default function Auth() {
             <p className="text-white font-bold text-[20px] ml-[100px] mt-0 -mb-[50px] pb-0">填写问卷，每周四收到你的专属匹配。</p>
           </div>
           <div className="mt-16 text-white font-bold ml-[100px]">
-            本周有128位lzuer活跃
+            本周有{activeUsersCount}位lzuer活跃
           </div>
         </motion.div>
 
