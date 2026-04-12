@@ -3,8 +3,8 @@ import { db, auth } from '../cloudbase';
 import { motion, AnimatePresence } from 'motion/react';
 import MatchAIChat from './MatchAIChat';
 import AIChatOnboarding from './AIChatOnboarding';
+import { useNavigate } from 'react-router-dom';
 import { MessageCircle, Heart, Target, Sparkles, Check, X, Zap } from 'lucide-react';
-import { runWeeklyMatching } from '../services/matchingAlgorithm';
 
 interface MatchProfile {
   uid: string;
@@ -21,11 +21,42 @@ interface MatchProfile {
   gender?: string;
   compatibilityScore?: number;
   aiReasoning?: string;
+  wechat?: string;
+}
+
+function getThisWeekReleaseTime(base = new Date()): Date {
+  const release = new Date(base);
+  const day = release.getDay();
+  const deltaToThisWeekThursday = 4 - day;
+  release.setDate(release.getDate() + deltaToThisWeekThursday);
+  release.setHours(21, 0, 0, 0);
+  return release;
+}
+
+function joinedBeforeThisRoundRelease(participationUpdatedAt: any, releaseTime: Date): boolean {
+  if (!participationUpdatedAt) return true;
+  const joinedAt = new Date(participationUpdatedAt);
+  if (Number.isNaN(joinedAt.getTime())) return true;
+  return joinedAt <= releaseTime;
+}
+
+function isCurrentRoundMatch(matchDoc: any, now: Date): boolean {
+  if (!matchDoc?.matchedAt) return false;
+  const matchedAt = new Date(matchDoc.matchedAt);
+  if (Number.isNaN(matchedAt.getTime())) return false;
+
+  const thisWeekRelease = getThisWeekReleaseTime(now);
+  const nextWeekRelease = new Date(thisWeekRelease);
+  nextWeekRelease.setDate(nextWeekRelease.getDate() + 7);
+
+  return matchedAt >= thisWeekRelease && matchedAt < nextWeekRelease;
 }
 
 export default function Matches() {
+  const navigate = useNavigate();
   const [matches, setMatches] = useState<MatchProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string>('');
   const [activeChatMatch, setActiveChatMatch] = useState<MatchProfile | null>(null);
   const [isParticipating, setIsParticipating] = useState(false);
   const [archiving, setArchiving] = useState(false);
@@ -36,6 +67,8 @@ export default function Matches() {
   const [revealedEmails, setRevealedEmails] = useState<Record<string, boolean>>({});
   const [activeUsersCount, setActiveUsersCount] = useState<number>(128);
   const [matchedPairsCount, setMatchedPairsCount] = useState<number>(0);
+  const [maleCount, setMaleCount] = useState<number>(0);
+  const [femaleCount, setFemaleCount] = useState<number>(0);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -43,6 +76,10 @@ export default function Matches() {
         const usersRes = await db.collection('users').where({ isParticipating: true }).get();
         if (usersRes.data) {
           setActiveUsersCount(usersRes.data.length);
+          const male = usersRes.data.filter((u: any) => u?.questionnaire?.gender === '男').length;
+          const female = usersRes.data.filter((u: any) => u?.questionnaire?.gender === '女').length;
+          setMaleCount(male);
+          setFemaleCount(female);
         }
         const matchesRes = await db.collection('matches').get();
         if (matchesRes.data) {
@@ -144,17 +181,26 @@ export default function Matches() {
   };
 
   const fetchData = async () => {
+    setLoadError('');
     const loginState = await auth.getLoginState();
     if (!loginState) return;
     const currentUid = auth.currentUser?.uid;
     if (!currentUid) return;
 
     try {
+      const nowTime = new Date();
+      const releaseTime = getThisWeekReleaseTime(nowTime);
+      const isRoundReleased = nowTime >= releaseTime;
+
       // Fetch user participation status and email
       const userRes = await db.collection('users').doc(currentUid).get();
       let currentEmail = '';
+      let participating = false;
+      let participationUpdatedAt: string | undefined;
       if (userRes.data && userRes.data.length > 0) {
-        setIsParticipating(userRes.data[0].isParticipating || false);
+        participating = userRes.data[0].isParticipating || false;
+        participationUpdatedAt = userRes.data[0].participationUpdatedAt;
+        setIsParticipating(participating);
         currentEmail = userRes.data[0].email?.toLowerCase() || '';
       }
 
@@ -173,12 +219,26 @@ export default function Matches() {
       // Cloudbase JS SDK supports querying arrays: .where({ users: db.command.in([currentUid]) }) or similar.
       // Actually, for array contains, CloudBase uses db.command.in or just passing the value if it's an array field.
       // Let's fetch all matches where currentUid is in the users array.
-      const _ = db.command;
       const matchesRes = await db.collection('matches').where({
         users: currentUid // CloudBase often allows this for array-contains
       }).get();
+
+      const regularMatchDocs = matchesRes.data || [];
       
-      for (const matchDoc of matchesRes.data || []) {
+      for (const matchDoc of regularMatchDocs) {
+        if (matchDoc.status && matchDoc.status !== 'active') {
+          continue;
+        }
+
+        // Weekly match results should only be published after the release timestamp.
+        if (!isRoundReleased) {
+          continue;
+        }
+
+        if (!isCurrentRoundMatch(matchDoc, nowTime)) {
+          continue;
+        }
+
         const users = matchDoc.users as string[];
         const otherUid = users.find(id => id !== currentUid);
         
@@ -197,6 +257,7 @@ export default function Matches() {
               college: userData.questionnaire?.college,
               grade: userData.questionnaire?.grade,
               gender: userData.questionnaire?.gender,
+              wechat: userData.questionnaire?.wechat,
               compatibilityScore: matchDoc.similarityScore ? Math.round(matchDoc.similarityScore * 100) : (matchDoc.compatibilityScore || Math.floor(Math.random() * 20) + 80),
               aiReasoning: matchDoc.aiReasoning || '你们在生活方式和价值观上有很高的契合度。',
               isDropMatch: false,
@@ -238,6 +299,7 @@ export default function Matches() {
                     college: userData.questionnaire?.college,
                     grade: userData.questionnaire?.grade,
                     gender: userData.questionnaire?.gender,
+                    wechat: userData.questionnaire?.wechat,
                     compatibilityScore: 100, // Mutual drop is 100%
                     aiReasoning: '你们互相暗恋了对方！这就是最好的推荐理由。',
                     isDropMatch: true
@@ -253,9 +315,13 @@ export default function Matches() {
       // 3. Fetch cupid matches is moved to Mailbox.tsx
       
       setMatches(matchProfiles);
+      const joinedThisRound = joinedBeforeThisRoundRelease(participationUpdatedAt, releaseTime);
+      const shouldShowFailed = participating && isRoundReleased && joinedThisRound && matchProfiles.length === 0;
+      setShowFailedMatchScreen(shouldShowFailed);
       return matchProfiles;
     } catch (err) {
       console.error("Error fetching data:", err);
+      setLoadError('匹配结果加载失败，请稍后重试。');
       return [];
     } finally {
       setLoading(false);
@@ -327,8 +393,14 @@ export default function Matches() {
     setIsParticipating(newState);
     try {
       await db.collection('users').doc(uid).update({
-        isParticipating: newState
+        isParticipating: newState,
+        participationUpdatedAt: new Date().toISOString()
       });
+      if (!newState) {
+        setShowFailedMatchScreen(false);
+      } else {
+        fetchData();
+      }
     } catch (err) {
       console.error("Error updating participation:", err);
       setIsParticipating(!newState); // revert on error
@@ -365,11 +437,11 @@ export default function Matches() {
     return () => clearInterval(timer);
   }, []);
 
-  // Calculate next Thursday 8:00 PM
+  // Calculate next Thursday 9:00 PM
   const getNextMatchTime = () => {
     const nextMatch = new Date();
     nextMatch.setDate(now.getDate() + ((4 - now.getDay() + 7) % 7));
-    nextMatch.setHours(20, 0, 0, 0);
+    nextMatch.setHours(21, 0, 0, 0);
     if (now > nextMatch) {
       nextMatch.setDate(nextMatch.getDate() + 7);
     }
@@ -389,6 +461,34 @@ export default function Matches() {
       </div>
     );
   }
+
+  if (loadError) {
+    return (
+      <div className="max-w-3xl mx-auto pb-12 min-h-[80vh] p-6 rounded-3xl relative overflow-hidden">
+        <div className="bg-white/5 backdrop-blur-md rounded-3xl border border-white/10 p-8 text-center mb-8 shadow-xl">
+          <h3 className="text-2xl font-extrabold text-black mb-2">结果加载失败</h3>
+          <p className="text-gray-800 mb-6 font-medium">{loadError}</p>
+          <button
+            onClick={() => {
+              setLoading(true);
+              fetchData();
+            }}
+            className="px-6 py-3 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-sm"
+          >
+            重新加载
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const genderTotal = maleCount + femaleCount;
+  const malePercent = genderTotal > 0 ? Math.round((maleCount / genderTotal) * 100) : 0;
+  const femalePercent = genderTotal > 0 ? 100 - malePercent : 0;
+  const radius = 24;
+  const circumference = 2 * Math.PI * radius;
+  const maleStroke = circumference * (malePercent / 100);
+  const femaleStroke = circumference - maleStroke;
 
   return (
     <div className="max-w-3xl mx-auto pb-12 min-h-[80vh] p-6 rounded-3xl relative overflow-hidden">
@@ -412,7 +512,7 @@ export default function Matches() {
               <Heart className="w-8 h-8 text-gray-800" />
             </div>
             <h3 className="text-xl font-bold text-black mb-2">你当前未参与匹配</h3>
-            <p className="text-gray-800 mb-6 font-medium">点击右上角按钮参与，每周四晚8点获取你的专属匹配。</p>
+            <p className="text-gray-800 mb-6 font-medium">点击右上角按钮参与，每周四晚9点获取你的专属匹配。</p>
             <button
               onClick={toggleParticipation}
               className="px-8 py-3 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-colors"
@@ -423,11 +523,13 @@ export default function Matches() {
         ) : matches.length === 0 ? (
           showFailedMatchScreen ? (
             <div className="bg-white/5 backdrop-blur-md rounded-3xl border border-white/10 p-8 text-center mb-8 shadow-xl">
-              <h3 className="text-2xl font-extrabold text-black mb-2">很遗憾，本周没有适合的对象哦</h3>
+              <h3 className="text-2xl font-extrabold text-black mb-2">暂时还没有合适对象</h3>
               <p className="text-gray-800 mb-6 font-medium">缘分还在路上，不要着急。</p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
                 <button
-                  onClick={() => setShowFailedMatchScreen(false)}
+                  onClick={() => {
+                    setShowFailedMatchScreen(false);
+                  }}
                   className="px-6 py-3 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-sm"
                 >
                   等待下一轮
@@ -541,8 +643,13 @@ export default function Matches() {
                           看看TA的邮箱
                         </button>
                       ) : (
-                        <div className="w-full py-3 bg-gray-100 text-black rounded-xl font-bold flex items-center justify-center gap-2 text-sm border border-gray-200">
-                          {match.email}
+                        <div className="w-full py-3 px-4 bg-gray-100 text-black rounded-xl font-bold flex flex-col items-center justify-center gap-2 text-sm border border-gray-200">
+                          <div>{match.email}</div>
+                          {match.wechat && (
+                            <div className="text-xs font-normal text-gray-600 border-t border-gray-300 pt-2 w-full text-center">
+                              微信号：{match.wechat}
+                            </div>
+                          )}
                         </div>
                       )}
                       
@@ -611,6 +718,19 @@ export default function Matches() {
           </div>
           <h4 className="text-lg font-extrabold text-black mb-1">爱神模式</h4>
           <p className="text-sm text-gray-800 font-medium">撮合你的朋友：输入双方邮箱，他们将收到撮合提醒并看到彼此。</p>
+        </div>
+      </div>
+
+      <div className="mt-4 mb-8">
+        <div
+          onClick={() => navigate('/buddies')}
+          className="bg-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/10 shadow-xl hover:border-black transition-colors cursor-pointer group"
+        >
+          <div className="w-12 h-12 bg-white/10 backdrop-blur-sm rounded-2xl flex items-center justify-center mb-4 group-hover:bg-black transition-colors shadow-sm">
+            <Zap className="w-6 h-6 text-black group-hover:text-white transition-colors" />
+          </div>
+          <h4 className="text-lg font-extrabold text-black mb-1">找搭子</h4>
+          <p className="text-sm text-gray-800 font-medium">游戏搭子、旅游搭子、吃饭搭子、周边玩搭子。点我进入发布和浏览。</p>
         </div>
       </div>
 
@@ -754,15 +874,60 @@ export default function Matches() {
       {/* Stats Section */}
       <div className="mt-12 mb-8 text-center bg-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/10 shadow-xl">
         <h4 className="text-lg font-extrabold text-black mb-4">平台实时数据</h4>
-        <div className="flex justify-around items-center">
-          <div className="flex flex-col items-center">
+        {/* 移动端纵向排列，桌面端横向排列 */}
+        <div className="flex flex-col sm:flex-row justify-center items-center gap-0">
+          <div className="flex-1 w-full flex flex-col items-center py-3 sm:py-0">
             <span className="text-3xl font-black text-black">{activeUsersCount}</span>
             <span className="text-xs font-bold text-gray-800 uppercase tracking-widest mt-1">活跃用户</span>
           </div>
-          <div className="w-px h-10 bg-white/20"></div>
-          <div className="flex flex-col items-center">
+
+          {/* 移动端横线，桌面端竖线 */}
+          <div className="w-24 h-px sm:w-px sm:h-12 bg-gray-500 sm:mx-6"></div>
+
+          <div className="flex-1 w-full flex flex-col items-center py-3 sm:py-0">
             <span className="text-3xl font-black text-black">{matchedPairsCount}</span>
             <span className="text-xs font-bold text-gray-800 uppercase tracking-widest mt-1">成功匹配对数</span>
+          </div>
+
+          <div className="w-24 h-px sm:w-px sm:h-12 bg-gray-500 sm:mx-6"></div>
+
+          <div className="flex-1 w-full flex flex-col items-center py-3 sm:py-0">
+            <div className="flex items-center gap-3">
+              <div className="relative w-20 h-20">
+                <svg viewBox="0 0 64 64" className="w-20 h-20 -rotate-90">
+                  <circle cx="32" cy="32" r={radius} fill="none" stroke="#E5E7EB" strokeWidth="8" />
+                  {genderTotal > 0 && (
+                    <>
+                      <circle
+                        cx="32"
+                        cy="32"
+                        r={radius}
+                        fill="none"
+                        stroke="#93C5FD"
+                        strokeWidth="8"
+                        strokeDasharray={`${maleStroke} ${circumference - maleStroke}`}
+                        strokeLinecap="round"
+                      />
+                      <circle
+                        cx="32"
+                        cy="32"
+                        r={radius}
+                        fill="none"
+                        stroke="#FFB6D9"
+                        strokeWidth="8"
+                        strokeDasharray={`${femaleStroke} ${circumference - femaleStroke}`}
+                        strokeDashoffset={-maleStroke}
+                        strokeLinecap="round"
+                      />
+                    </>
+                  )}
+                </svg>
+              </div>
+              <div className="text-base font-semibold text-gray-800">
+                <div>男 {malePercent}%</div>
+                <div>女 {femalePercent}%</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

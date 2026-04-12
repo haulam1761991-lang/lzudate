@@ -1,5 +1,6 @@
 import { db } from '../cloudbase';
 import { calculateMatchScore } from '../utils/matching';
+import { callAIChat } from './aiService';
 
 // Cosine Similarity calculation
 function cosineSimilarity(vecA: number[], vecB: number[]): number {
@@ -17,32 +18,16 @@ function cosineSimilarity(vecA: number[], vecB: number[]): number {
 }
 
 async function callGLM(prompt: string): Promise<string> {
-  const apiKey = import.meta.env.VITE_GLM_API_KEY;
-  if (!apiKey) {
-    console.error("GLM API key is missing");
-    return "";
-  }
-  
   try {
-    const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'glm-4.7',
-        messages: [
-          {
-            role: 'user',
-            content: prompt
-          }
-        ]
-      })
+    return await callAIChat({
+      model: import.meta.env.VITE_GLM_HIGH_QUALITY_MODEL || 'glm-4.7',
+      messages: [
+        {
+          role: 'user',
+          text: prompt
+        }
+      ]
     });
-    
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || "";
   } catch (e) {
     console.error("GLM API call failed:", e);
     return "";
