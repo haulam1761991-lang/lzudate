@@ -47,12 +47,12 @@ export default function Auth() {
   }, [isLogin]);
 
   const handleSendCode = async () => {
-    if (!email.endsWith('@lzu.edu.cn')) {
-      setError('必须使用 @lzu.edu.cn 邮箱');
+    if (!username) {
+      setError('请先填写校园卡号');
       return;
     }
-    if (!username) {
-      setError('请先填写用户名');
+    if (!/^(1202|2202|3202)\d{8}$/.test(username)) {
+      setError('校园卡号格式错误');
       return;
     }
     if (!password) {
@@ -77,7 +77,7 @@ export default function Auth() {
     } catch (err: any) {
       let errorMsg = err.message || '发送验证码失败，请重试';
       if (errorMsg.toLowerCase().includes('username')) {
-        errorMsg = '用户名需要是小写字母和数字哦';
+        errorMsg = '校园卡号格式错误';
       }
       setError(errorMsg);
     } finally {
@@ -129,8 +129,13 @@ export default function Auth() {
         }
       } else {
         // 注册状态
-        if (!email.endsWith('@lzu.edu.cn')) {
-          setError('必须使用 @lzu.edu.cn 邮箱注册');
+        if (!username) {
+          setError('请先填写校园卡号');
+          setLoading(false);
+          return;
+        }
+        if (!/^(1202|2202|3202)\d{8}$/.test(username)) {
+          setError('校园卡号格式错误');
           setLoading(false);
           return;
         }
@@ -168,7 +173,7 @@ export default function Auth() {
     } catch (err: any) {
       let errorMsg = err.message || '认证失败，请检查输入是否正确';
       if (errorMsg.toLowerCase().includes('username')) {
-        errorMsg = '用户名需要是小写字母和数字哦';
+        errorMsg = '校园卡号格式错误';
       }
       setError(errorMsg);
     } finally {
@@ -260,7 +265,7 @@ export default function Auth() {
                       required
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      placeholder="设置用户名"
+                      placeholder="校园卡号"
                       className="w-full px-5 py-4 bg-white/20 border-2 border-black rounded-2xl focus:outline-none focus:border-black/60 transition-colors text-black placeholder:text-black/70 text-lg font-medium shadow-inner"
                     />
                   </div>
@@ -280,7 +285,7 @@ export default function Auth() {
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="校园邮箱 (@lzu.edu.cn)"
+                      placeholder="这是确保TA能联系到您的唯一方式哦"
                       className="w-full px-5 py-4 bg-white/20 border-2 border-black rounded-2xl focus:outline-none focus:border-black/60 transition-colors text-black placeholder:text-black/70 text-lg font-medium shadow-inner"
                     />
                   </div>

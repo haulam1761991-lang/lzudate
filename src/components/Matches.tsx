@@ -64,6 +64,7 @@ export default function Matches() {
   const [showCupidModal, setShowCupidModal] = useState(false);
   const [showTrainModal, setShowTrainModal] = useState(false);
   const [showFailedMatchScreen, setShowFailedMatchScreen] = useState(false);
+  const [showCoffeeModal, setShowCoffeeModal] = useState(false);
   const [revealedEmails, setRevealedEmails] = useState<Record<string, boolean>>({});
   const [activeUsersCount, setActiveUsersCount] = useState<number>(128);
   const [matchedPairsCount, setMatchedPairsCount] = useState<number>(0);
@@ -506,6 +507,28 @@ export default function Matches() {
           </button>
         </div>
 
+        {isParticipating && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0 }}
+            onClick={() => setShowCoffeeModal(true)}
+            className="bg-white/5 backdrop-blur-md rounded-3xl border border-white/10 overflow-hidden shadow-xl cursor-pointer hover:border-white/20 transition-colors mb-8"
+          >
+            <div className="relative h-56 sm:h-64">
+              <img 
+                src="/lzucoffee.jpg"
+                alt="LZU Coffee联名" 
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              <div className="relative z-10 h-full p-6 sm:p-8 pt-9 sm:pt-10 flex flex-col justify-start">
+                    <h3 className="text-3xl font-bold italic text-white leading-tight">LZU Coffee联名</h3>
+                    <h3 className="text-3xl font-bold italic text-white leading-tight">享“久久”咖啡</h3>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         {!isParticipating ? (
           <div className="bg-white/5 backdrop-blur-md rounded-3xl border border-white/10 p-8 text-center mb-8 shadow-xl">
             <div className="w-16 h-16 bg-white/10 backdrop-blur-sm rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
@@ -868,6 +891,34 @@ export default function Matches() {
               <AIChatOnboarding onSummaryGenerated={handleTrainAI} />
             </div>
           </div>
+        </div>
+      )}
+
+      {showCoffeeModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+          onClick={() => setShowCoffeeModal(false)}
+        >
+          <motion.div 
+            onClick={e => e.stopPropagation()}
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            className="rounded-3xl w-full max-w-2xl shadow-2xl border border-white/20 p-[1px]"
+          >
+            <div
+              className="rounded-[22px] overflow-hidden"
+              style={{ backgroundImage: 'url(/lzucoffee.jpg)', backgroundSize: 'cover', backgroundPosition: 'center' }}
+            >
+              <div className="relative p-8">
+                <h2 className="text-3xl font-bold italic text-white leading-tight">LZU Coffee联名</h2>
+                <h2 className="text-3xl font-bold italic text-white leading-tight mb-3">享“久久”咖啡</h2>
+                <p className="text-lg font-normal italic text-white leading-relaxed mt-3" style={{ textShadow: '0 1px 4px rgba(0, 0, 0, 0.9)' }}>
+                  匹配成功的lzuer可与你的匹配伴侣一起凭截图去lzu coffee享“久”折咖啡与附赠茶歇，外加活动哦！
+                </p>
+              </div>
+            </div>
+          </motion.div>
         </div>
       )}
 
