@@ -66,7 +66,7 @@ export default function Matches() {
   const [showFailedMatchScreen, setShowFailedMatchScreen] = useState(false);
   const [showCoffeeModal, setShowCoffeeModal] = useState(false);
   const [revealedEmails, setRevealedEmails] = useState<Record<string, boolean>>({});
-  const [activeUsersCount, setActiveUsersCount] = useState<number>(128);
+  const [activeUsersCount, setActiveUsersCount] = useState<number>(0);
   const [matchedPairsCount, setMatchedPairsCount] = useState<number>(0);
   const [maleCount, setMaleCount] = useState<number>(0);
   const [femaleCount, setFemaleCount] = useState<number>(0);
@@ -74,17 +74,24 @@ export default function Matches() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const usersRes = await db.collection('users').where({ isParticipating: true }).get();
-        if (usersRes.data) {
-          setActiveUsersCount(usersRes.data.length);
-          const male = usersRes.data.filter((u: any) => u?.questionnaire?.gender === '男').length;
-          const female = usersRes.data.filter((u: any) => u?.questionnaire?.gender === '女').length;
-          setMaleCount(male);
-          setFemaleCount(female);
+        const [activeUsersRes, maleCountRes, femaleCountRes, matchesRes] = await Promise.all([
+          db.collection('users').where({ isParticipating: true }).count(),
+          db.collection('users').where({ isParticipating: true, 'questionnaire.gender': '男' }).count(),
+          db.collection('users').where({ isParticipating: true, 'questionnaire.gender': '女' }).count(),
+          db.collection('matches').count()
+        ]);
+
+        if (activeUsersRes?.total !== undefined) {
+          setActiveUsersCount(activeUsersRes.total);
         }
-        const matchesRes = await db.collection('matches').get();
-        if (matchesRes.data) {
-          setMatchedPairsCount(matchesRes.data.length);
+        if (maleCountRes?.total !== undefined) {
+          setMaleCount(maleCountRes.total);
+        }
+        if (femaleCountRes?.total !== undefined) {
+          setFemaleCount(femaleCountRes.total);
+        }
+        if (matchesRes?.total !== undefined) {
+          setMatchedPairsCount(matchesRes.total);
         }
       } catch (err) {
         console.error("Failed to fetch stats:", err);
@@ -523,7 +530,7 @@ export default function Matches() {
               />
               <div className="relative z-10 h-full p-6 sm:p-8 pt-9 sm:pt-10 flex flex-col justify-start">
                     <h3 className="text-3xl font-bold italic text-white leading-tight">LZU Coffee联名</h3>
-                    <h3 className="text-3xl font-bold italic text-white leading-tight">享“久久”咖啡</h3>
+                    <h3 className="text-3xl font-bold italic text-white leading-tight">十分真诚，八分留给咖啡，两分留给春色</h3>
               </div>
             </div>
           </motion.div>
@@ -912,9 +919,9 @@ export default function Matches() {
             >
               <div className="relative p-8">
                 <h2 className="text-3xl font-bold italic text-white leading-tight">LZU Coffee联名</h2>
-                <h2 className="text-3xl font-bold italic text-white leading-tight mb-3">享“久久”咖啡</h2>
+                <h2 className="text-3xl font-bold italic text-white leading-tight mb-3">十分真诚，八分留给咖啡，两分留给春色</h2>
                 <p className="text-lg font-normal italic text-white leading-relaxed mt-3" style={{ textShadow: '0 1px 4px rgba(0, 0, 0, 0.9)' }}>
-                  匹配成功的lzuer可与你的匹配伴侣一起凭截图去lzu coffee享“久”折咖啡与附赠茶歇，外加活动哦！
+                  匹配成功的lzuer可与你的匹配伴侣一起凭证去lzu coffee享八折咖啡与附赠茶歇，外加活动哦！
                 </p>
               </div>
             </div>
